@@ -1,39 +1,42 @@
+// Configuracion general del programa
 const CONFIG = {
-    TIEMPO_MAXIMO: 260,
-    INTERVALO_SIMULACION: 50,
-    ALERTA_DURACION: 5000,
+    TIEMPO_MAXIMO: 260, // Duracion total de la simulacion en minutos
+    INTERVALO_SIMULACION: 50, // Intervalo entre actualizaciones en milisegundos
+    ALERTA_DURACION: 5000, // Duracion de la alerta en milisegundos
     
+    // Configuracion de tiempos para diferentes areas
     CLIENTES: {
         CAJA: { 
-            PROMEDIO: 60, 
-            VARIACION: 30 
+            PROMEDIO: 60, // Tiempo promedio en caja
+            VARIACION: 30 // Variacion permitida
         },
         MOSTRADOR: { 
-            PROMEDIO: 30, 
+            PROMEDIO: 30, // Tiempo promedio en mostrador
             VARIACION: 15 
         },
         ROJO: { 
-            PROMEDIO: 30, 
+            PROMEDIO: 30, // Tiempo promedio en salon rojo
             VARIACION: 10, 
-            MAXIMO: 30 
+            MAXIMO: 30 // Maximo de clientes permitidos
         },
         AZUL: { 
-            PROMEDIO: 40, 
+            PROMEDIO: 40, // Tiempo promedio en salon azul
             VARIACION: 10, 
             MAXIMO: 40 
         },
         PREPARACION: {
             LOCAL: { 
-                PROMEDIO: 90, 
+                PROMEDIO: 90, // Tiempo promedio de preparacion para local
                 VARIACION: 10 
             },
             LLEVAR: { 
-                PROMEDIO: 120, 
+                PROMEDIO: 120, // Tiempo promedio de preparacion para llevar
                 VARIACION: 20 
             }
         }
     },
     
+    // Configuracion de horarios y flujo de clientes
     HORARIOS: {
         HORA_11_12: { 
             ROJO: { PROMEDIO: 20, VARIACION: 15 }, 
@@ -54,6 +57,7 @@ const CONFIG = {
     }
 };
 
+// Referencias a elementos del DOM
 const DOM = {
     botones: {
         start: document.getElementById("startBtn"),
@@ -77,6 +81,7 @@ const DOM = {
     }
 };
 
+// Estado actual de la simulacion
 const estadoSimulacion = {
     tiempo: 0,
     intervalo: null,
@@ -89,11 +94,14 @@ const estadoSimulacion = {
     }
 };
 
+// Funciones de utilidad
 const utilidades = {
+    // Genera un numero aleatorio basado en promedio y variacion
     obtenerNumeroAleatorio: (promedio, variacion) => {
         return Math.round(promedio + (Math.random() * 2 - 1) * variacion);
     },
 
+    // Muestra una alerta con animacion
     mostrarAlerta: () => {
         const alerta = DOM.alertContainer;
         alerta.style.display = "block";
@@ -115,12 +123,14 @@ const utilidades = {
         }, CONFIG.ALERTA_DURACION);
     },
 
+    // Convierte minutos a formato de hora
     formatearHora: (minutos) => {
         const hora = Math.floor(minutos / 60) + 11;
         const min = minutos % 60;
         return `${hora.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
     },
 
+    // Actualiza las estadisticas y tablas
     actualizarEstadisticas: (datos) => {
         estadoSimulacion.estadisticas.tiempoTotalNegocio += datos.tiempoNegocio;
         estadoSimulacion.estadisticas.tiempoTotalCaja += datos.caja;
@@ -138,6 +148,7 @@ const utilidades = {
         DOM.contadores.promedioTiempoNegocio.innerText = `${promedioNegocio} min`;
         DOM.contadores.promedioTiempoCaja.innerText = `${promedioCaja} min`;
 
+        // Actualiza tabla de mostrador cada 15 minutos
         if (estadoSimulacion.tiempo % 15 === 0) {
             estadoSimulacion.estadisticas.registroMostrador.push({
                 hora: utilidades.formatearHora(estadoSimulacion.tiempo),
@@ -149,6 +160,7 @@ const utilidades = {
             row.insertCell(1).textContent = datos.mostrador;
         }
 
+        // Actualiza tabla de salones cada 30 minutos
         if (estadoSimulacion.tiempo % 30 === 0) {
             estadoSimulacion.estadisticas.registroSalones.push({
                 hora: utilidades.formatearHora(estadoSimulacion.tiempo),
@@ -164,7 +176,9 @@ const utilidades = {
     }
 };
 
+// Logica principal de la simulacion
 const simulacion = {
+    // Determina el horario actual basado en el tiempo
     obtenerHorarioActual: () => {
         const tiempo = estadoSimulacion.tiempo;
         if (tiempo < 60) return CONFIG.HORARIOS.HORA_11_12;
@@ -173,14 +187,17 @@ const simulacion = {
         return CONFIG.HORARIOS.HORA_1435_1520;
     },
 
+    // Determina si el cliente es para llevar o local
     determinarTipoCliente: () => {
         return Math.random() < 0.2 ? 'LLEVAR' : 'LOCAL';
     },
 
+    // Determina a que salon va el cliente
     determinarSalon: () => {
         return Math.random() < 0.3 ? 'ROJO' : 'AZUL';
     },
 
+    // Obtiene los datos de los clientes para el momento actual
     obtenerDatosClientes: () => {
         const { CLIENTES } = CONFIG;
         const horarioActual = simulacion.obtenerHorarioActual();
@@ -230,6 +247,7 @@ const simulacion = {
         };
     },
 
+    // Actualiza los datos en la interfaz
     actualizarDatos: (datos) => {
         DOM.contadores.tiempoActual.innerText = utilidades.formatearHora(estadoSimulacion.tiempo);
         DOM.contadores.caja.innerText = datos.caja;
@@ -241,6 +259,7 @@ const simulacion = {
         visualizacion.posicionarClientes(datos);
     },
 
+    // Ejecuta la simulacion en tiempo real
     ejecutar: () => {
         estadoSimulacion.estadisticas = {
             tiempoTotalNegocio: 0,
@@ -261,12 +280,13 @@ const simulacion = {
 
             if (estadoSimulacion.tiempo >= CONFIG.TIEMPO_MAXIMO) {
                 clearInterval(estadoSimulacion.intervalo);
-                console.log("Simulación completada.");
+                console.log("Simulacion completada.");
                 utilidades.mostrarAlerta();
             }
         }, CONFIG.INTERVALO_SIMULACION);
     },
 
+    // Ejecuta la simulacion instantaneamente
     ejecutarInstantanea: () => {
         estadoSimulacion.estadisticas = {
             tiempoTotalNegocio: 0,
@@ -328,14 +348,16 @@ const simulacion = {
         const datosFinales = simulacion.obtenerDatosClientes();
         simulacion.actualizarDatos(datosFinales);
         
-        console.log("Simulación instantánea completada.");
+        console.log("Simulacion instantanea completada.");
         utilidades.mostrarAlerta();
     }
 };
 
+// Visualizacion del escenario
 const visualizacion = {
     ctx: DOM.canvas.getContext("2d"),
 
+    // Dibuja el escenario base
     dibujarEscenario: () => {
         const { ctx } = visualizacion;
         ctx.fillStyle = "#FFFFFF";
@@ -352,12 +374,13 @@ const visualizacion = {
         ctx.font = "0.85rem Arial";
         ctx.fillText("CAJA", 90, 40);
         ctx.fillText("MOSTRADOR", 210, 40);
-        ctx.fillText("SALÓN ROJO", 400, 115);
-        ctx.fillText("SALÓN AZUL", 400, 245);
+        ctx.fillText("SALON ROJO", 400, 115);
+        ctx.fillText("SALON AZUL", 400, 245);
         ctx.fillText("ENTRADA", 50, 395);
         ctx.fillText("PARA LLEVAR", 50, 415);
     },
 
+    // Posiciona los clientes en el escenario
     posicionarClientes: (datos) => {
         const { ctx } = visualizacion;
         ctx.clearRect(0, 0, DOM.canvas.width, DOM.canvas.height);
@@ -391,6 +414,7 @@ const visualizacion = {
     }
 };
 
+// Event listeners para los botones
 DOM.botones.start.addEventListener("click", () => {
     DOM.botones.start.style.display = "none";
     DOM.botones.instant.style.display = "block";
