@@ -11,4 +11,18 @@ body {
 
 footer {
     margin-top: auto;
+}
+
+#simulation {
+    overflow-x: auto;
+    padding-bottom: 10px;
+}
+
+#simulation .card {
+    min-width: 600px;
+}
+
+#canvas {
+    max-width: 100%;
+    height: auto;
 } 
