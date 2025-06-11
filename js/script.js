@@ -1,434 +1,522 @@
-// Configuracion general del programa
-const CONFIG = {
-    TIEMPO_MAXIMO: 260, // Duracion total de la simulacion en minutos
-    INTERVALO_SIMULACION: 50, // Intervalo entre actualizaciones en milisegundos
-    ALERTA_DURACION: 5000, // Duracion de la alerta en milisegundos
-    
-    // Configuracion de tiempos para diferentes areas
-    CLIENTES: {
-        CAJA: { 
-            PROMEDIO: 60, // Tiempo promedio en caja
-            VARIACION: 30 // Variacion permitida
+document.addEventListener("DOMContentLoaded", () => {
+
+    const CONFIG = {
+        // Duración total: 11:00 a 15:20 son 4h 20min = 260 minutos = 15600 segundos.
+        TIEMPO_MAXIMO_SIMULACION: 260 * 60,
+        INTERVALO_VISUALIZACION_MS: 1, // Velocidad de la simulación visual 
+        CANTIDAD_EMPLEADOS_MOSTRADOR: 3,
+
+        LLEGADA_CLIENTES: {
+            PROMEDIO: 60,
+            VARIACION: 30
         },
-        MOSTRADOR: { 
-            PROMEDIO: 30, // Tiempo promedio en mostrador
-            VARIACION: 15 
-        },
-        ROJO: { 
-            PROMEDIO: 30, // Tiempo promedio en salon rojo
-            VARIACION: 10, 
-            MAXIMO: 30 // Maximo de clientes permitidos
-        },
-        AZUL: { 
-            PROMEDIO: 40, // Tiempo promedio en salon azul
-            VARIACION: 10, 
-            MAXIMO: 40 
+        ATENCION_CAJA: {
+            PROMEDIO: 30,
+            VARIACION: 15
         },
         PREPARACION: {
-            LOCAL: { 
-                PROMEDIO: 90, // Tiempo promedio de preparacion para local
-                VARIACION: 10 
+            LOCAL: { PROMEDIO: 90, VARIACION: 10 },
+            LLEVAR: { PROMEDIO: 120, VARIACION: 20 }
+        },
+        SALONES: {
+            ROJO: { CAPACIDAD: 30 },
+            AZUL: { CAPACIDAD: 40 }
+        },
+        // Tiempos de permanencia en salones (en minutos, se convertirán a segundos).
+        PERMANENCIA: {
+            // 11:00 a 12:00 (0 a 3600s)
+            FRANJA_1: {
+                MIN: 0,
+                MAX: 60 * 60,
+                ROJO: { PROMEDIO: 20 * 60, VARIACION: 15 * 60 },
+                AZUL: { PROMEDIO: 30 * 60, VARIACION: 10 * 60 }
             },
-            LLEVAR: { 
-                PROMEDIO: 120, // Tiempo promedio de preparacion para llevar
-                VARIACION: 20 
+            // 12:00 a 13:30 (3600 a 9000s)
+            FRANJA_2: {
+                MIN: 60 * 60,
+                MAX: 90 * 60,
+                ROJO: { PROMEDIO: 30 * 60, VARIACION: 15 * 60 },
+                AZUL: { PROMEDIO: 40 * 60, VARIACION: 10 * 60 }
+            },
+            // 13:30 a 14:35 (9000 a 14100s)
+            FRANJA_3: {
+                MIN: 90 * 60,
+                MAX: (2 * 60 + 35) * 60,
+                ROJO: { PROMEDIO: 35 * 60, VARIACION: 15 * 60 },
+                AZUL: { PROMEDIO: 45 * 60, VARIACION: 10 * 60 }
+            },
+            // 14:35 a 15:20
+            FRANJA_4: {
+                MIN: (2 * 60 + 35) * 60,
+                MAX: (4 * 60 + 20) * 60,
+                ROJO: { PROMEDIO: 20 * 60, VARIACION: 15 * 60 },
+                AZUL: { PROMEDIO: 35 * 60, VARIACION: 10 * 60 }
             }
+        },
+        PROBABILIDADES: {
+            LLEVAR: 0.20,
+            SALON_ROJO: 0.30 // El resto (0.70) va al azul.
+        },
+        // Intervalos para la recolección de estadísticas (en segundos)
+        INTERVALO_REPORTE_MOSTRADOR: 15 * 60,
+        INTERVALO_REPORTE_SALONES: 30 * 60,
+    };
+
+    // ===================================================================================
+    // REFERENCIAS A ELEMENTOS DEL DOM
+    // ===================================================================================
+    const DOM = {
+        botones: {
+            start: document.getElementById("startBtn"),
+            instant: document.getElementById("instantBtn"),
+            restart: document.getElementById("restartBtn")
+        },
+        canvas: document.getElementById("canvas"),
+        ctx: document.getElementById("canvas").getContext("2d"),
+        alertContainer: document.getElementById("alertContainer"),
+        contadores: {
+            tiempoActual: document.getElementById("tiempoActual"),
+            caja: document.getElementById("cajaCount"),
+            mostrador: document.getElementById("mostradorCount"),
+            salonRojo: document.getElementById("salonRojoCount"),
+            salonAzul: document.getElementById("salonAzulCount"),
+            promedioTiempoNegocio: document.getElementById("promedioTiempoNegocio"),
+            promedioTiempoCaja: document.getElementById("promedioTiempoCaja")
+        },
+        tablas: {
+            mostrador: document.getElementById("tablaMostrador").getElementsByTagName("tbody")[0],
+            salones: document.getElementById("tablaSalones").getElementsByTagName("tbody")[0]
         }
-    },
-    
-    // Configuracion de horarios y flujo de clientes
-    HORARIOS: {
-        HORA_11_12: { 
-            ROJO: { PROMEDIO: 20, VARIACION: 15 }, 
-            AZUL: { PROMEDIO: 30, VARIACION: 10 } 
-        },
-        HORA_12_1330: { 
-            ROJO: { PROMEDIO: 30, VARIACION: 15 }, 
-            AZUL: { PROMEDIO: 40, VARIACION: 10 } 
-        },
-        HORA_1330_1435: { 
-            ROJO: { PROMEDIO: 35, VARIACION: 15 }, 
-            AZUL: { PROMEDIO: 45, VARIACION: 10 } 
-        },
-        HORA_1435_1520: { 
-            ROJO: { PROMEDIO: 20, VARIACION: 15 }, 
-            AZUL: { PROMEDIO: 35, VARIACION: 10 } 
+    };
+
+    // ===================================================================================
+    // ESTADO DE LA SIMULACIÓN
+    // Almacena todas las variables que cambian durante la simulación.
+    // ===================================================================================
+    let simState = {};
+
+    function resetSimState() {
+        simState = {
+            tiempoActual: 0,
+            proximaLlegadaCliente: 0,
+            proximoReporteMostrador: 0,
+            proximoReporteSalones: 0,
+            intervaloId: null,
+            simulacionTerminada: false,
+
+            // Representación de los recursos del sistema
+            caja: {
+                ocupada: false,
+                clienteId: null,
+                libreEn: 0
+            },
+            mostrador: Array.from({ length: CONFIG.CANTIDAD_EMPLEADOS_MOSTRADOR }, () => ({
+                ocupado: false,
+                clienteId: null,
+                libreEn: 0
+            })),
+
+            // Colas y listas de clientes
+            clientes: new Map(), // Almacena todos los clientes por ID.
+            colaCaja: [],
+            colaMostrador: [],
+            enSalonRojo: [],
+            enSalonAzul: [],
+
+            // Estadísticas
+            stats: {
+                totalClientesFinalizados: 0,
+                tiempoTotalEnNegocio: 0,
+                tiempoTotalEnColaCaja: 0
+            }
+        };
+    }
+
+
+    // ===================================================================================
+    // CLASE CLIENTE (El "Agente" de la simulación)
+    // ===================================================================================
+    class Cliente {
+        static nextId = 1;
+        constructor(tiempoLlegada) {
+            this.id = Cliente.nextId++;
+            this.llegadaTime = tiempoLlegada;
+            this.tipo = Math.random() < CONFIG.PROBABILIDADES.LLEVAR ? 'LLEVAR' : 'LOCAL';
+            this.destinoSalon = 'NINGUNO';
+
+            if (this.tipo === 'LOCAL') {
+                this.destinoSalon = Math.random() < CONFIG.PROBABILIDADES.SALON_ROJO ? 'ROJO' : 'AZUL';
+            }
+
+            // Tiempos que se calcularán durante la simulación
+            this.inicioAtencionCajaTime = 0;
+            this.finAtencionCajaTime = 0;
+            this.finPreparacionTime = 0;
+            this.salidaTime = 0;
         }
     }
-};
 
-// Referencias a elementos del DOM
-const DOM = {
-    botones: {
-        start: document.getElementById("startBtn"),
-        instant: document.getElementById("instantBtn"),
-        restart: document.getElementById("restartBtn")
-    },
-    canvas: document.getElementById("canvas"),
-    alertContainer: document.getElementById("alertContainer"),
-    contadores: {
-        tiempoActual: document.getElementById("tiempoActual"),
-        caja: document.getElementById("cajaCount"),
-        mostrador: document.getElementById("mostradorCount"),
-        salonRojo: document.getElementById("salonRojoCount"),
-        salonAzul: document.getElementById("salonAzulCount"),
-        promedioTiempoNegocio: document.getElementById("promedioTiempoNegocio"),
-        promedioTiempoCaja: document.getElementById("promedioTiempoCaja")
-    },
-    tablas: {
-        mostrador: document.getElementById("tablaMostrador").getElementsByTagName("tbody")[0],
-        salones: document.getElementById("tablaSalones").getElementsByTagName("tbody")[0]
-    }
-};
+    // ===================================================================================
+    // FUNCIONES DE UTILIDAD
+    // ===================================================================================
+    const utils = {
+        // Genera un número aleatorio con variación. Asegura que no sea negativo.
+        tiempoAleatorio: (promedio, variacion) => {
+            const valor = promedio + (Math.random() * 2 - 1) * variacion;
+            return Math.max(0, valor);
+        },
 
-// Estado actual de la simulacion
-const estadoSimulacion = {
-    tiempo: 0,
-    intervalo: null,
-    estadisticas: {
-        tiempoTotalNegocio: 0,
-        tiempoTotalCaja: 0,
-        clientesAtendidos: 0,
-        registroMostrador: [],
-        registroSalones: []
-    }
-};
+        // Convierte segundos de simulación a formato HH:MM
+        formatearHora: (segundos) => {
+            const minutosTotales = Math.floor(segundos / 60);
+            const hora = Math.floor(minutosTotales / 60) + 11;
+            const min = minutosTotales % 60;
+            return `${hora.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+        },
 
-// Funciones de utilidad
-const utilidades = {
-    // Genera un numero aleatorio basado en promedio y variacion
-    obtenerNumeroAleatorio: (promedio, variacion) => {
-        return Math.round(promedio + (Math.random() * 2 - 1) * variacion);
-    },
+        // Obtiene la configuración de permanencia según la hora
+        getPermanenciaConfig: (tiempoActual) => {
+            for (const franja in CONFIG.PERMANENCIA) {
+                const f = CONFIG.PERMANENCIA[franja];
+                if (tiempoActual >= f.MIN && tiempoActual < f.MAX) {
+                    return f;
+                }
+            }
+            return CONFIG.PERMANENCIA.FRANJA_4; // Default a la última franja
+        }
+    };
 
-    // Muestra una alerta con animacion
-    mostrarAlerta: () => {
-        const alerta = DOM.alertContainer;
-        alerta.style.display = "block";
-        alerta.style.opacity = "0";
-        alerta.style.transform = "translateY(-20px)";
-        alerta.style.transition = "all 0.3s ease-in-out";
-        
-        setTimeout(() => {
-            alerta.style.opacity = "1";
-            alerta.style.transform = "translateY(0)";
-        }, 100);
+    // ===================================================================================
+    // VISUALIZACIÓN EN CANVAS
+    // ===================================================================================
+    const visualizacion = {
+        dibujarEscenario: () => {
+            const { ctx } = DOM;
+            ctx.clearRect(0, 0, DOM.canvas.width, DOM.canvas.height);
+            ctx.fillStyle = "#f0f0f0"; // Fondo
+            ctx.fillRect(0, 0, DOM.canvas.width, DOM.canvas.height);
 
-        setTimeout(() => {
-            alerta.style.opacity = "0";
-            alerta.style.transform = "translateY(-20px)";
-            setTimeout(() => {
-                alerta.style.display = "none";
-            }, 300);
-        }, CONFIG.ALERTA_DURACION);
-    },
+            // Zonas
+            ctx.strokeStyle = "#cccccc";
+            ctx.lineWidth = 1;
 
-    // Convierte minutos a formato de hora
-    formatearHora: (minutos) => {
-        const hora = Math.floor(minutos / 60) + 11;
-        const min = minutos % 60;
-        return `${hora.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-    },
+            // Entrada
+            ctx.strokeRect(20, 350, 100, 50);
+            ctx.fillStyle = "black";
+            ctx.font = "12px Arial";
+            ctx.fillText("Entrada", 45, 380);
 
-    // Actualiza las estadisticas y tablas
-    actualizarEstadisticas: (datos) => {
-        estadoSimulacion.estadisticas.tiempoTotalNegocio += datos.tiempoNegocio;
-        estadoSimulacion.estadisticas.tiempoTotalCaja += datos.caja;
-        estadoSimulacion.estadisticas.clientesAtendidos++;
+            // Caja
+            ctx.strokeRect(20, 20, 150, 100);
+            ctx.fillText("Caja", 75, 15);
+            
+            // Mostrador
+            ctx.strokeRect(200, 20, 150, 100);
+            ctx.fillText("Mostrador", 240, 15);
 
-        const promedioNegocio = Math.round(
-            estadoSimulacion.estadisticas.tiempoTotalNegocio / 
-            estadoSimulacion.estadisticas.clientesAtendidos
-        );
-        const promedioCaja = Math.round(
-            estadoSimulacion.estadisticas.tiempoTotalCaja / 
-            estadoSimulacion.estadisticas.clientesAtendidos
-        );
+            // Salones
+            ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+            ctx.fillRect(380, 20, 200, 180);
+            ctx.strokeRect(380, 20, 200, 180);
+            ctx.fillStyle = "black";
+            ctx.fillText(`Salón Rojo (${simState.enSalonRojo.length}/${CONFIG.SALONES.ROJO.CAPACIDAD})`, 420, 15);
 
-        DOM.contadores.promedioTiempoNegocio.innerText = `${promedioNegocio} min`;
-        DOM.contadores.promedioTiempoCaja.innerText = `${promedioCaja} min`;
+            ctx.fillStyle = "rgba(0, 0, 255, 0.1)";
+            ctx.fillRect(380, 220, 200, 180);
+            ctx.strokeRect(380, 220, 200, 180);
+            ctx.fillStyle = "black";
+            ctx.fillText(`Salón Azul (${simState.enSalonAzul.length}/${CONFIG.SALONES.AZUL.CAPACIDAD})`, 420, 215);
+        },
 
-        // Actualiza tabla de mostrador cada 15 minutos
-        if (estadoSimulacion.tiempo % 15 === 0) {
-            estadoSimulacion.estadisticas.registroMostrador.push({
-                hora: utilidades.formatearHora(estadoSimulacion.tiempo),
-                cantidad: datos.mostrador
+        dibujarClientes: () => {
+            const { ctx } = DOM;
+            
+            // Cola Caja
+            ctx.fillStyle = "orange";
+            simState.colaCaja.forEach((id, i) => {
+                ctx.fillRect(30 + (i % 7) * 15, 40 + Math.floor(i / 7) * 15, 10, 10);
             });
             
-            const row = DOM.tablas.mostrador.insertRow();
-            row.insertCell(0).textContent = utilidades.formatearHora(estadoSimulacion.tiempo);
-            row.insertCell(1).textContent = datos.mostrador;
-        }
+            // Cliente en Caja
+            if(simState.caja.ocupada){
+                 ctx.fillStyle = "green";
+                 ctx.fillRect(80, 90, 12, 12);
+            }
 
-        // Actualiza tabla de salones cada 30 minutos
-        if (estadoSimulacion.tiempo % 30 === 0) {
-            estadoSimulacion.estadisticas.registroSalones.push({
-                hora: utilidades.formatearHora(estadoSimulacion.tiempo),
-                rojo: datos.rojo,
-                azul: datos.azul
+            // Cola Mostrador
+            ctx.fillStyle = "purple";
+            simState.colaMostrador.forEach((id, i) => {
+                 ctx.fillRect(210 + (i % 7) * 15, 40 + Math.floor(i / 7) * 15, 10, 10);
+            });
+
+            // Clientes en Mostrador
+            simState.mostrador.forEach((empleado, i) => {
+                if(empleado.ocupado) {
+                    ctx.fillStyle = "green";
+                    ctx.fillRect(210 + i * 40, 90, 12, 12);
+                }
+            });
+
+            // Clientes en Salón Rojo
+            ctx.fillStyle = "red";
+            simState.enSalonRojo.forEach((id, i) => {
+                 ctx.fillRect(390 + (i % 12) * 15, 40 + Math.floor(i / 12) * 15, 10, 10);
             });
             
-            const row = DOM.tablas.salones.insertRow();
-            row.insertCell(0).textContent = utilidades.formatearHora(estadoSimulacion.tiempo);
-            row.insertCell(1).textContent = datos.rojo;
-            row.insertCell(2).textContent = datos.azul;
+            // Clientes en Salón Azul
+            ctx.fillStyle = "blue";
+            simState.enSalonAzul.forEach((id, i) => {
+                 ctx.fillRect(390 + (i % 12) * 15, 240 + Math.floor(i / 12) * 15, 10, 10);
+            });
+        },
+
+        actualizarTodo: () => {
+            visualizacion.dibujarEscenario();
+            visualizacion.dibujarClientes();
         }
-    }
-};
+    };
 
-// Logica principal de la simulacion
-const simulacion = {
-    // Determina el horario actual basado en el tiempo
-    obtenerHorarioActual: () => {
-        const tiempo = estadoSimulacion.tiempo;
-        if (tiempo < 60) return CONFIG.HORARIOS.HORA_11_12;
-        if (tiempo < 150) return CONFIG.HORARIOS.HORA_12_1330;
-        if (tiempo < 215) return CONFIG.HORARIOS.HORA_1330_1435;
-        return CONFIG.HORARIOS.HORA_1435_1520;
-    },
 
-    // Determina si el cliente es para llevar o local
-    determinarTipoCliente: () => {
-        return Math.random() < 0.2 ? 'LLEVAR' : 'LOCAL';
-    },
+    // ===================================================================================
+    // LÓGICA PRINCIPAL DE LA SIMULACIÓN
+    // ===================================================================================
+    const simulador = {
+        // Un "tick" representa el avance de 1 segundo en la simulación.
+        tick: () => {
+            const t = simState.tiempoActual;
 
-    // Determina a que salon va el cliente
-    determinarSalon: () => {
-        return Math.random() < 0.3 ? 'ROJO' : 'AZUL';
-    },
-
-    // Obtiene los datos de los clientes para el momento actual
-    obtenerDatosClientes: () => {
-        const { CLIENTES } = CONFIG;
-        const horarioActual = simulacion.obtenerHorarioActual();
-        const tipoCliente = simulacion.determinarTipoCliente();
-        
-        const vaAlRojo = tipoCliente === 'LOCAL' && Math.random() < 0.7;
-        const vaAlAzul = tipoCliente === 'LOCAL' && Math.random() < 0.9;
-
-        const tiempoPreparacion = tipoCliente === 'LLEVAR' 
-            ? utilidades.obtenerNumeroAleatorio(
-                CLIENTES.PREPARACION.LLEVAR.PROMEDIO, 
-                CLIENTES.PREPARACION.LLEVAR.VARIACION
-            )
-            : utilidades.obtenerNumeroAleatorio(
-                CLIENTES.PREPARACION.LOCAL.PROMEDIO, 
-                CLIENTES.PREPARACION.LOCAL.VARIACION
-            );
-
-        let tiempoPermanencia = 0;
-        if (vaAlRojo) {
-            tiempoPermanencia += utilidades.obtenerNumeroAleatorio(
-                horarioActual.ROJO.PROMEDIO, 
-                horarioActual.ROJO.VARIACION
-            );
-        }
-        if (vaAlAzul) {
-            tiempoPermanencia += utilidades.obtenerNumeroAleatorio(
-                horarioActual.AZUL.PROMEDIO, 
-                horarioActual.AZUL.VARIACION
-            );
-        }
-
-        return {
-            caja: utilidades.obtenerNumeroAleatorio(CLIENTES.CAJA.PROMEDIO, CLIENTES.CAJA.VARIACION),
-            mostrador: utilidades.obtenerNumeroAleatorio(CLIENTES.MOSTRADOR.PROMEDIO, CLIENTES.MOSTRADOR.VARIACION),
-            rojo: vaAlRojo ? Math.min(
-                utilidades.obtenerNumeroAleatorio(CLIENTES.ROJO.PROMEDIO, CLIENTES.ROJO.VARIACION), 
-                CLIENTES.ROJO.MAXIMO
-            ) : 0,
-            azul: vaAlAzul ? Math.min(
-                utilidades.obtenerNumeroAleatorio(CLIENTES.AZUL.PROMEDIO, CLIENTES.AZUL.VARIACION), 
-                CLIENTES.AZUL.MAXIMO
-            ) : 0,
-            tiempoNegocio: tiempoPermanencia,
-            tipoCliente,
-            tiempoPreparacion
-        };
-    },
-
-    // Actualiza los datos en la interfaz
-    actualizarDatos: (datos) => {
-        DOM.contadores.tiempoActual.innerText = utilidades.formatearHora(estadoSimulacion.tiempo);
-        DOM.contadores.caja.innerText = datos.caja;
-        DOM.contadores.mostrador.innerText = datos.mostrador;
-        DOM.contadores.salonRojo.innerText = datos.rojo;
-        DOM.contadores.salonAzul.innerText = datos.azul;
-
-        utilidades.actualizarEstadisticas(datos);
-        visualizacion.posicionarClientes(datos);
-    },
-
-    // Ejecuta la simulacion en tiempo real
-    ejecutar: () => {
-        estadoSimulacion.estadisticas = {
-            tiempoTotalNegocio: 0,
-            tiempoTotalCaja: 0,
-            clientesAtendidos: 0,
-            registroMostrador: [],
-            registroSalones: []
-        };
-        
-        DOM.tablas.mostrador.innerHTML = '';
-        DOM.tablas.salones.innerHTML = '';
-        DOM.contadores.tiempoActual.innerText = "11:00";
-
-        estadoSimulacion.intervalo = setInterval(() => {
-            estadoSimulacion.tiempo += 1;
-            const datos = simulacion.obtenerDatosClientes();
-            simulacion.actualizarDatos(datos);
-
-            if (estadoSimulacion.tiempo >= CONFIG.TIEMPO_MAXIMO) {
-                clearInterval(estadoSimulacion.intervalo);
-                console.log("Simulacion completada.");
-                utilidades.mostrarAlerta();
-            }
-        }, CONFIG.INTERVALO_SIMULACION);
-    },
-
-    // Ejecuta la simulacion instantaneamente
-    ejecutarInstantanea: () => {
-        estadoSimulacion.estadisticas = {
-            tiempoTotalNegocio: 0,
-            tiempoTotalCaja: 0,
-            clientesAtendidos: 0,
-            registroMostrador: [],
-            registroSalones: []
-        };
-        
-        DOM.tablas.mostrador.innerHTML = '';
-        DOM.tablas.salones.innerHTML = '';
-        DOM.contadores.tiempoActual.innerText = "11:00";
-
-        for (let tiempo = 0; tiempo <= CONFIG.TIEMPO_MAXIMO; tiempo++) {
-            estadoSimulacion.tiempo = tiempo;
-            const datos = simulacion.obtenerDatosClientes();
-            
-            estadoSimulacion.estadisticas.tiempoTotalNegocio += datos.tiempoNegocio;
-            estadoSimulacion.estadisticas.tiempoTotalCaja += datos.caja;
-            estadoSimulacion.estadisticas.clientesAtendidos++;
-
-            if (tiempo % 15 === 0) {
-                estadoSimulacion.estadisticas.registroMostrador.push({
-                    hora: utilidades.formatearHora(tiempo),
-                    cantidad: datos.mostrador
-                });
+            // 1. EVENTO: LLEGADA DE NUEVO CLIENTE
+            if (t >= simState.proximaLlegadaCliente && t < CONFIG.TIEMPO_MAXIMO_SIMULACION) {
+                const nuevoCliente = new Cliente(t);
+                simState.clientes.set(nuevoCliente.id, nuevoCliente);
+                simState.colaCaja.push(nuevoCliente.id);
                 
+                // Programar la próxima llegada
+                const tiempoProximaLlegada = utils.tiempoAleatorio(CONFIG.LLEGADA_CLIENTES.PROMEDIO, CONFIG.LLEGADA_CLIENTES.VARIACION);
+                simState.proximaLlegadaCliente = t + tiempoProximaLlegada;
+            }
+
+            // 2. PROCESO: ATENCIÓN EN CAJA
+            // Si la caja está libre y hay alguien en la cola...
+            if (!simState.caja.ocupada && simState.colaCaja.length > 0) {
+                const clienteId = simState.colaCaja.shift();
+                const cliente = simState.clientes.get(clienteId);
+                
+                simState.caja.ocupada = true;
+                simState.caja.clienteId = clienteId;
+                
+                const tiempoAtencion = utils.tiempoAleatorio(CONFIG.ATENCION_CAJA.PROMEDIO, CONFIG.ATENCION_CAJA.VARIACION);
+                simState.caja.libreEn = t + tiempoAtencion;
+                
+                cliente.inicioAtencionCajaTime = t;
+                cliente.finAtencionCajaTime = t + tiempoAtencion;
+
+                // Calcular estadística de tiempo en cola
+                const tiempoEnCola = cliente.inicioAtencionCajaTime - cliente.llegadaTime;
+                simState.stats.tiempoTotalEnColaCaja += tiempoEnCola;
+            }
+
+            // 3. EVENTO: CLIENTE TERMINA EN CAJA
+            if (simState.caja.ocupada && t >= simState.caja.libreEn) {
+                const clienteId = simState.caja.clienteId;
+                simState.colaMostrador.push(clienteId);
+
+                // Liberar la caja
+                simState.caja.ocupada = false;
+                simState.caja.clienteId = null;
+            }
+
+            // 4. PROCESO: PREPARACIÓN DE PEDIDO EN MOSTRADOR
+            // Buscar un empleado libre
+            const empleadoLibreIdx = simState.mostrador.findIndex(e => !e.ocupado);
+            if (empleadoLibreIdx !== -1 && simState.colaMostrador.length > 0) {
+                const clienteId = simState.colaMostrador.shift();
+                const cliente = simState.clientes.get(clienteId);
+                
+                // Asignar al empleado
+                simState.mostrador[empleadoLibreIdx].ocupado = true;
+                simState.mostrador[empleadoLibreIdx].clienteId = clienteId;
+
+                const configPrep = cliente.tipo === 'LOCAL' ? CONFIG.PREPARACION.LOCAL : CONFIG.PREPARACION.LLEVAR;
+                const tiempoPreparacion = utils.tiempoAleatorio(configPrep.PROMEDIO, configPrep.VARIACION);
+
+                simState.mostrador[empleadoLibreIdx].libreEn = t + tiempoPreparacion;
+                cliente.finPreparacionTime = t + tiempoPreparacion;
+            }
+
+            // 5. EVENTO: PEDIDO LISTO EN MOSTRADOR
+            simState.mostrador.forEach((empleado, idx) => {
+                if (empleado.ocupado && t >= empleado.libreEn) {
+                    const clienteId = empleado.clienteId;
+                    const cliente = simState.clientes.get(clienteId);
+
+                    if (cliente.tipo === 'LLEVAR') {
+                        // El cliente se va
+                        cliente.salidaTime = t;
+                        simState.stats.totalClientesFinalizados++;
+                        simState.stats.tiempoTotalEnNegocio += (cliente.salidaTime - cliente.llegadaTime);
+                    } else {
+                        // El cliente intenta ir a un salón
+                        const salonDestino = cliente.destinoSalon === 'ROJO' ? simState.enSalonRojo : simState.enSalonAzul;
+                        const capacidadSalon = cliente.destinoSalon === 'ROJO' ? CONFIG.SALONES.ROJO.CAPACIDAD : CONFIG.SALONES.AZUL.CAPACIDAD;
+
+                        if (salonDestino.length < capacidadSalon) {
+                            salonDestino.push(clienteId);
+                            const configPermanencia = utils.getPermanenciaConfig(t);
+                            const permanencia = cliente.destinoSalon === 'ROJO' 
+                                ? utils.tiempoAleatorio(configPermanencia.ROJO.PROMEDIO, configPermanencia.ROJO.VARIACION)
+                                : utils.tiempoAleatorio(configPermanencia.AZUL.PROMEDIO, configPermanencia.AZUL.VARIACION);
+                            cliente.salidaTime = t + permanencia;
+                        } else {
+                            // Salón lleno, el cliente se va (según interpretación del enunciado)
+                            cliente.salidaTime = t;
+                            simState.stats.totalClientesFinalizados++;
+                            simState.stats.tiempoTotalEnNegocio += (cliente.salidaTime - cliente.llegadaTime);
+                        }
+                    }
+                    // Liberar al empleado
+                    empleado.ocupado = false;
+                    empleado.clienteId = null;
+                }
+            });
+            
+            // 6. EVENTO: CLIENTES SALEN DE LOS SALONES
+            const checkSalidaSalon = (salonArray) => {
+                 const clientesQueSeQuedan = [];
+                 salonArray.forEach(clienteId => {
+                     const cliente = simState.clientes.get(clienteId);
+                     if(t >= cliente.salidaTime) {
+                         simState.stats.totalClientesFinalizados++;
+                         simState.stats.tiempoTotalEnNegocio += (cliente.salidaTime - cliente.llegadaTime);
+                     } else {
+                         clientesQueSeQuedan.push(clienteId);
+                     }
+                 });
+                 return clientesQueSeQuedan;
+            };
+            simState.enSalonRojo = checkSalidaSalon(simState.enSalonRojo);
+            simState.enSalonAzul = checkSalidaSalon(simState.enSalonAzul);
+
+
+            // 7. RECOLECCIÓN DE ESTADÍSTICAS POR INTERVALO
+            if (t >= simState.proximoReporteMostrador) {
                 const row = DOM.tablas.mostrador.insertRow();
-                row.insertCell(0).textContent = utilidades.formatearHora(tiempo);
-                row.insertCell(1).textContent = datos.mostrador;
+                row.insertCell(0).textContent = utils.formatearHora(t);
+                row.insertCell(1).textContent = simState.colaMostrador.length;
+                simState.proximoReporteMostrador += CONFIG.INTERVALO_REPORTE_MOSTRADOR;
             }
 
-            if (tiempo % 30 === 0) {
-                estadoSimulacion.estadisticas.registroSalones.push({
-                    hora: utilidades.formatearHora(tiempo),
-                    rojo: datos.rojo,
-                    azul: datos.azul
-                });
-                
+            if (t >= simState.proximoReporteSalones) {
                 const row = DOM.tablas.salones.insertRow();
-                row.insertCell(0).textContent = utilidades.formatearHora(tiempo);
-                row.insertCell(1).textContent = datos.rojo;
-                row.insertCell(2).textContent = datos.azul;
+                row.insertCell(0).textContent = utils.formatearHora(t);
+                row.insertCell(1).textContent = simState.enSalonRojo.length;
+                row.insertCell(2).textContent = simState.enSalonAzul.length;
+                simState.proximoReporteSalones += CONFIG.INTERVALO_REPORTE_SALONES;
             }
-        }
 
-        const promedioNegocio = Math.round(
-            estadoSimulacion.estadisticas.tiempoTotalNegocio / 
-            estadoSimulacion.estadisticas.clientesAtendidos
-        );
-        const promedioCaja = Math.round(
-            estadoSimulacion.estadisticas.tiempoTotalCaja / 
-            estadoSimulacion.estadisticas.clientesAtendidos
-        );
+            // 8. AVANZAR EL TIEMPO
+            simState.tiempoActual++;
+        },
 
-        DOM.contadores.promedioTiempoNegocio.innerText = `${promedioNegocio} min`;
-        DOM.contadores.promedioTiempoCaja.innerText = `${promedioCaja} min`;
+        // Actualiza la interfaz de usuario con los datos actuales.
+        actualizarUI: () => {
+            DOM.contadores.tiempoActual.innerText = utils.formatearHora(simState.tiempoActual);
+            
+            // Cantidad de gente en la cola + siendo atendido
+            DOM.contadores.caja.innerText = simState.colaCaja.length + (simState.caja.ocupada ? 1 : 0);
+            DOM.contadores.mostrador.innerText = simState.colaMostrador.length + simState.mostrador.filter(e => e.ocupado).length;
+            DOM.contadores.salonRojo.innerText = simState.enSalonRojo.length;
+            DOM.contadores.salonAzul.innerText = simState.enSalonAzul.length;
 
-        const datosFinales = simulacion.obtenerDatosClientes();
-        simulacion.actualizarDatos(datosFinales);
+            const { stats } = simState;
+            if (stats.totalClientesFinalizados > 0) {
+                const promedioNegocio = stats.tiempoTotalEnNegocio / stats.totalClientesFinalizados;
+                DOM.contadores.promedioTiempoNegocio.innerText = `${Math.round(promedioNegocio / 60)} min`;
+
+                const promedioCaja = stats.tiempoTotalEnColaCaja / stats.totalClientesFinalizados; // O por clientes que pasaron por caja
+                DOM.contadores.promedioTiempoCaja.innerText = `${Math.round(promedioCaja / 60)} min`;
+            }
+        },
+
+        // Bucle principal para la simulación visual
+        iniciarSimulacionVisual: () => {
+            if (simState.intervaloId) clearInterval(simState.intervaloId);
+            simState.intervaloId = setInterval(() => {
+                simulador.tick();
+                simulador.actualizarUI();
+                visualizacion.actualizarTodo();
+                
+                if (simState.tiempoActual > CONFIG.TIEMPO_MAXIMO_SIMULACION) {
+                    simulador.detenerSimulacion();
+                }
+            }, CONFIG.INTERVALO_VISUALIZACION_MS);
+        },
+
+        // Ejecuta toda la simulación de golpe
+        iniciarSimulacionInstantanea: () => {
+            if (simState.intervaloId) clearInterval(simState.intervaloId);
+            
+            while(simState.tiempoActual <= CONFIG.TIEMPO_MAXIMO_SIMULACION) {
+                simulador.tick();
+            }
+            simulador.actualizarUI();
+            visualizacion.actualizarTodo();
+            simulador.detenerSimulacion();
+        },
+
+        detenerSimulacion: () => {
+             if (simState.intervaloId) clearInterval(simState.intervaloId);
+             simState.simulacionTerminada = true;
+             console.log("Simulación finalizada.");
+             console.log("Estado final:", simState);
+             
+             // Mostrar alerta
+             DOM.alertContainer.style.display = 'block';
+             setTimeout(() => { DOM.alertContainer.style.display = 'none'; }, 5000);
+        },
         
-        console.log("Simulacion instantanea completada.");
-        utilidades.mostrarAlerta();
-    }
-};
-
-// Visualizacion del escenario
-const visualizacion = {
-    ctx: DOM.canvas.getContext("2d"),
-
-    // Dibuja el escenario base
-    dibujarEscenario: () => {
-        const { ctx } = visualizacion;
-        ctx.fillStyle = "#FFFFFF";
-        ctx.fillRect(20, 20, 560, 360);
-        ctx.fillStyle = "#ff0000";
-        ctx.fillRect(350, 120, 200, 100);
-        ctx.fillStyle = "#4040d6";
-        ctx.fillRect(350, 250, 200, 100);
-        ctx.fillStyle = "#c0c0c0";
-        for (let i = 0; i < 5; i++) {
-            ctx.fillRect(320, 340 - i * 10, 25, 5);
+        limpiarUI: () => {
+            DOM.tablas.mostrador.innerHTML = '';
+            DOM.tablas.salones.innerHTML = '';
+            DOM.contadores.promedioTiempoNegocio.innerText = '0 min';
+            DOM.contadores.promedioTiempoCaja.innerText = '0 min';
+            DOM.contadores.tiempoActual.innerText = '11:00';
         }
-        ctx.fillStyle = "#000000";
-        ctx.font = "0.85rem Arial";
-        ctx.fillText("CAJA", 90, 40);
-        ctx.fillText("MOSTRADOR", 210, 40);
-        ctx.fillText("SALON ROJO", 400, 115);
-        ctx.fillText("SALON AZUL", 400, 245);
-        ctx.fillText("ENTRADA", 50, 395);
-        ctx.fillText("PARA LLEVAR", 50, 415);
-    },
+    };
 
-    // Posiciona los clientes en el escenario
-    posicionarClientes: (datos) => {
-        const { ctx } = visualizacion;
-        ctx.clearRect(0, 0, DOM.canvas.width, DOM.canvas.height);
-        visualizacion.dibujarEscenario();
+    // ===================================================================================
+    // MANEJADORES DE EVENTOS
+    // ===================================================================================
+    DOM.botones.start.addEventListener("click", () => {
+        DOM.botones.start.style.display = "none";
+        DOM.botones.instant.style.display = "inline-block";
+        DOM.botones.restart.style.display = "inline-block";
         
-        const { caja, mostrador, rojo, azul, tipoCliente, tiempoPreparacion } = datos;
+        resetSimState();
+        simulador.limpiarUI();
+        visualizacion.actualizarTodo();
+        simulador.iniciarSimulacionVisual();
+    });
+
+    DOM.botones.instant.addEventListener("click", () => {
+        simulador.iniciarSimulacionInstantanea();
+    });
+
+    DOM.botones.restart.addEventListener("click", () => {
+        if(simState.intervaloId) clearInterval(simState.intervaloId);
         
-        ctx.fillStyle = "#000000";
-        for (let i = 0; i < caja; i++) {
-            ctx.fillRect(55 + (i % 5) * 20, 55 + Math.floor(i / 5) * 20, 10, 10);
-        }
-
-        for (let i = 0; i < mostrador; i++) {
-            ctx.fillRect(185 + (i % 5) * 20, 55 + Math.floor(i / 5) * 20, 10, 10);
-        }
-
-        ctx.fillStyle = "#000000";
-        for (let i = 0; i < rojo; i++) {
-            ctx.fillRect(350 + (i % 10) * 15, 140 + Math.floor(i / 10) * 15, 10, 10);
-        }
-
-        for (let i = 0; i < azul; i++) {
-            ctx.fillRect(350 + (i % 10) * 15, 280 + Math.floor(i / 10) * 15, 10, 10);
-        }
-
-        if (tipoCliente === 'LLEVAR') {
-            ctx.fillRect(50, 425, 10, 10);
-            ctx.font = "0.7rem Arial";
-            ctx.fillText(`Tiempo prep: ${tiempoPreparacion}s`, 70, 430);
-        }
-    }
-};
-
-// Event listeners para los botones
-DOM.botones.start.addEventListener("click", () => {
-    DOM.botones.start.style.display = "none";
-    DOM.botones.instant.style.display = "block";
-    DOM.botones.restart.style.display = "block";
-    document.getElementById("simulation").style.display = "block";
-    simulacion.ejecutar();
-});
-
-DOM.botones.instant.addEventListener("click", () => {
-    clearInterval(estadoSimulacion.intervalo);
-    simulacion.ejecutarInstantanea();
-});
-
-DOM.botones.restart.addEventListener("click", () => {
-    DOM.alertContainer.style.display = "none";
-    location.reload();
+        DOM.botones.start.style.display = "inline-block";
+        DOM.botones.instant.style.display = "none";
+        DOM.botones.restart.style.display = "none";
+        
+        resetSimState();
+        simulador.limpiarUI();
+        simulador.actualizarUI();
+        visualizacion.actualizarTodo();
+    });
+    
+    // Estado inicial al cargar la página
+    resetSimState();
+    simulador.actualizarUI();
+    visualizacion.actualizarTodo();
 });
