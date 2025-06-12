@@ -1,9 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
 
     const CONFIG = {
-        // Duración total: 11:00 a 15:20 son 4h 20min = 260 minutos = 15600 segundos.
-        TIEMPO_MAXIMO_SIMULACION: 260 * 60,
-        INTERVALO_VISUALIZACION_MS: 1, // Velocidad de la simulación visual 
+        TIEMPO_MAXIMO_SIMULACION: 260 * 60, // 260 minutos
+        INTERVALO_VISUALIZACION_MS: 1, // velocidad
         CANTIDAD_EMPLEADOS_MOSTRADOR: 3,
 
         LLEGADA_CLIENTES: {
@@ -22,7 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
             ROJO: { CAPACIDAD: 30 },
             AZUL: { CAPACIDAD: 40 }
         },
-        // Tiempos de permanencia en salones (en minutos, se convertirán a segundos).
         PERMANENCIA: {
             // 11:00 a 12:00 (0 a 3600s)
             FRANJA_1: {
@@ -62,9 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
         INTERVALO_REPORTE_SALONES: 30 * 60,
     };
 
-    // ===================================================================================
-    // REFERENCIAS A ELEMENTOS DEL DOM
-    // ===================================================================================
+
     const DOM = {
         botones: {
             start: document.getElementById("startBtn"),
@@ -89,10 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // ===================================================================================
-    // ESTADO DE LA SIMULACIÓN
-    // Almacena todas las variables que cambian durante la simulación.
-    // ===================================================================================
+
     let simState = {};
 
     function resetSimState() {
@@ -117,13 +110,13 @@ document.addEventListener("DOMContentLoaded", () => {
             })),
 
             // Colas y listas de clientes
-            clientes: new Map(), // Almacena todos los clientes por ID.
+            clientes: new Map(), // Almacena todos los clientes por idd
             colaCaja: [],
             colaMostrador: [],
             enSalonRojo: [],
             enSalonAzul: [],
 
-            // Estadísticas
+            // Estadistocas
             stats: {
                 totalClientesFinalizados: 0,
                 tiempoTotalEnNegocio: 0,
@@ -133,9 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
 
-    // ===================================================================================
-    // CLASE CLIENTE (El "Agente" de la simulación)
-    // ===================================================================================
+    // CLASE CLIENTE
     class Cliente {
         static nextId = 1;
         constructor(tiempoLlegada) {
@@ -156,17 +147,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    // ===================================================================================
     // FUNCIONES DE UTILIDAD
-    // ===================================================================================
     const utils = {
-        // Genera un número aleatorio con variación. Asegura que no sea negativo.
+
         tiempoAleatorio: (promedio, variacion) => {
             const valor = promedio + (Math.random() * 2 - 1) * variacion;
             return Math.max(0, valor);
         },
 
-        // Convierte segundos de simulación a formato HH:MM
         formatearHora: (segundos) => {
             const minutosTotales = Math.floor(segundos / 60);
             const hora = Math.floor(minutosTotales / 60) + 11;
@@ -174,7 +162,6 @@ document.addEventListener("DOMContentLoaded", () => {
             return `${hora.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
         },
 
-        // Obtiene la configuración de permanencia según la hora
         getPermanenciaConfig: (tiempoActual) => {
             for (const franja in CONFIG.PERMANENCIA) {
                 const f = CONFIG.PERMANENCIA[franja];
@@ -182,39 +169,33 @@ document.addEventListener("DOMContentLoaded", () => {
                     return f;
                 }
             }
-            return CONFIG.PERMANENCIA.FRANJA_4; // Default a la última franja
+            return CONFIG.PERMANENCIA.FRANJA_4; 
         }
     };
 
-    // ===================================================================================
-    // VISUALIZACIÓN EN CANVAS
-    // ===================================================================================
+    //  CANVAS
     const visualizacion = {
         dibujarEscenario: () => {
             const { ctx } = DOM;
             ctx.clearRect(0, 0, DOM.canvas.width, DOM.canvas.height);
-            ctx.fillStyle = "#f0f0f0"; // Fondo
+            ctx.fillStyle = "#f0f0f0";
             ctx.fillRect(0, 0, DOM.canvas.width, DOM.canvas.height);
 
-            // Zonas
+            /
             ctx.strokeStyle = "#cccccc";
             ctx.lineWidth = 1;
 
-            // Entrada
             ctx.strokeRect(20, 350, 100, 50);
             ctx.fillStyle = "black";
             ctx.font = "12px Arial";
             ctx.fillText("Entrada", 45, 380);
 
-            // Caja
             ctx.strokeRect(20, 20, 150, 100);
             ctx.fillText("Caja", 75, 15);
             
-            // Mostrador
             ctx.strokeRect(200, 20, 150, 100);
             ctx.fillText("Mostrador", 240, 15);
 
-            // Salones
             ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
             ctx.fillRect(380, 20, 200, 180);
             ctx.strokeRect(380, 20, 200, 180);
@@ -231,25 +212,25 @@ document.addEventListener("DOMContentLoaded", () => {
         dibujarClientes: () => {
             const { ctx } = DOM;
             
-            // Cola Caja
+            // Cola caja
             ctx.fillStyle = "orange";
             simState.colaCaja.forEach((id, i) => {
                 ctx.fillRect(30 + (i % 7) * 15, 40 + Math.floor(i / 7) * 15, 10, 10);
             });
             
-            // Cliente en Caja
+            // ciente en Caja
             if(simState.caja.ocupada){
                  ctx.fillStyle = "green";
                  ctx.fillRect(80, 90, 12, 12);
             }
 
-            // Cola Mostrador
+            // cola mostrador
             ctx.fillStyle = "purple";
             simState.colaMostrador.forEach((id, i) => {
                  ctx.fillRect(210 + (i % 7) * 15, 40 + Math.floor(i / 7) * 15, 10, 10);
             });
 
-            // Clientes en Mostrador
+            // clientes mostrador
             simState.mostrador.forEach((empleado, i) => {
                 if(empleado.ocupado) {
                     ctx.fillStyle = "green";
@@ -257,13 +238,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             });
 
-            // Clientes en Salón Rojo
+            // cientes en salon Rojo
             ctx.fillStyle = "red";
             simState.enSalonRojo.forEach((id, i) => {
                  ctx.fillRect(390 + (i % 12) * 15, 40 + Math.floor(i / 12) * 15, 10, 10);
             });
             
-            // Clientes en Salón Azul
+            // clientes en Salon Azul
             ctx.fillStyle = "blue";
             simState.enSalonAzul.forEach((id, i) => {
                  ctx.fillRect(390 + (i % 12) * 15, 240 + Math.floor(i / 12) * 15, 10, 10);
@@ -277,27 +258,25 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
 
-    // ===================================================================================
-    // LÓGICA PRINCIPAL DE LA SIMULACIÓN
-    // ===================================================================================
+    // la logica d ela simulacion
     const simulador = {
-        // Un "tick" representa el avance de 1 segundo en la simulación.
+        // un tick por segundo
         tick: () => {
             const t = simState.tiempoActual;
 
-            // 1. EVENTO: LLEGADA DE NUEVO CLIENTE
+            // evento 1: llegado del cliente
             if (t >= simState.proximaLlegadaCliente && t < CONFIG.TIEMPO_MAXIMO_SIMULACION) {
                 const nuevoCliente = new Cliente(t);
                 simState.clientes.set(nuevoCliente.id, nuevoCliente);
                 simState.colaCaja.push(nuevoCliente.id);
                 
-                // Programar la próxima llegada
+                // Programar la proxima llegada
                 const tiempoProximaLlegada = utils.tiempoAleatorio(CONFIG.LLEGADA_CLIENTES.PROMEDIO, CONFIG.LLEGADA_CLIENTES.VARIACION);
                 simState.proximaLlegadaCliente = t + tiempoProximaLlegada;
             }
 
-            // 2. PROCESO: ATENCIÓN EN CAJA
-            // Si la caja está libre y hay alguien en la cola...
+            // 2. proceso de atencion en caja
+            // Si la caja esta libre y hay alguien en la cola
             if (!simState.caja.ocupada && simState.colaCaja.length > 0) {
                 const clienteId = simState.colaCaja.shift();
                 const cliente = simState.clientes.get(clienteId);
@@ -311,7 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 cliente.inicioAtencionCajaTime = t;
                 cliente.finAtencionCajaTime = t + tiempoAtencion;
 
-                // Calcular estadística de tiempo en cola
+                // Calcular estadistica de tiempo en cola
                 const tiempoEnCola = cliente.inicioAtencionCajaTime - cliente.llegadaTime;
                 simState.stats.tiempoTotalEnColaCaja += tiempoEnCola;
             }
@@ -326,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 simState.caja.clienteId = null;
             }
 
-            // 4. PROCESO: PREPARACIÓN DE PEDIDO EN MOSTRADOR
+            // 4. PROCESO: PREPARACIN DE PEDIDO EN MOSTRADOR
             // Buscar un empleado libre
             const empleadoLibreIdx = simState.mostrador.findIndex(e => !e.ocupado);
             if (empleadoLibreIdx !== -1 && simState.colaMostrador.length > 0) {
@@ -398,7 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
             simState.enSalonAzul = checkSalidaSalon(simState.enSalonAzul);
 
 
-            // 7. RECOLECCIÓN DE ESTADÍSTICAS POR INTERVALO
+            // 7. ESTADISTICAS POR INTERVALO
             if (t >= simState.proximoReporteMostrador) {
                 const row = DOM.tablas.mostrador.insertRow();
                 row.insertCell(0).textContent = utils.formatearHora(t);
@@ -418,7 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
             simState.tiempoActual++;
         },
 
-        // Actualiza la interfaz de usuario con los datos actuales.
+        // Actualiza la interfaz de usuario con los datos actuales
         actualizarUI: () => {
             DOM.contadores.tiempoActual.innerText = utils.formatearHora(simState.tiempoActual);
             
@@ -438,7 +417,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         },
 
-        // Bucle principal para la simulación visual
+        // Bucle principal
         iniciarSimulacionVisual: () => {
             if (simState.intervaloId) clearInterval(simState.intervaloId);
             simState.intervaloId = setInterval(() => {
@@ -452,7 +431,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }, CONFIG.INTERVALO_VISUALIZACION_MS);
         },
 
-        // Ejecuta toda la simulación de golpe
+        // Ejecuta toda la simulacion de una
         iniciarSimulacionInstantanea: () => {
             if (simState.intervaloId) clearInterval(simState.intervaloId);
             
@@ -484,9 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // ===================================================================================
-    // MANEJADORES DE EVENTOS
-    // ===================================================================================
+    // botones
     DOM.botones.start.addEventListener("click", () => {
         DOM.botones.start.style.display = "none";
         DOM.botones.instant.style.display = "inline-block";
@@ -515,7 +492,6 @@ document.addEventListener("DOMContentLoaded", () => {
         visualizacion.actualizarTodo();
     });
     
-    // Estado inicial al cargar la página
     resetSimState();
     simulador.actualizarUI();
     visualizacion.actualizarTodo();
