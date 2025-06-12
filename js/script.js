@@ -178,9 +178,9 @@ document.addEventListener("DOMContentLoaded", () => {
         dibujarEscenario: () => {
             const { ctx } = DOM;
             ctx.clearRect(0, 0, DOM.canvas.width, DOM.canvas.height);
-            ctx.fillStyle = "#f0f0f0";
+            ctx.fillStyle = "#ffffff";
             ctx.fillRect(0, 0, DOM.canvas.width, DOM.canvas.height);
-            
+
             ctx.strokeStyle = "#cccccc";
             ctx.lineWidth = 1;
 
